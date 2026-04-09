@@ -55,11 +55,12 @@ def parse_HTTP_message(http_message):
 
     for line in lines[1:]:
         header, content = line.split(b":",1)
-        dict[header] = content
+        dict[header.decode()] = content
 
     dict["Body"] = body
 
     print(dict)
+    return dict
 
 
 dict = {'Request-Line': b'HTTP/1.1 200 OK', b'Content-Type': b' text/html', b'Content-Length': b' 1024', b'Date': b' Thu, 19 Mar 2026 13:17:00 GMT', b'Server': b' Apache/2.4.1 (Unix)', 'Body': b'<!DOCTYPE html>\r\n<html>\r\n<head>\r\n<title>Example Page</title>\r\n</head>\r\n<body>\r\n<h1>Hello, World!</h1>\r\n</body>\r\n</html>\r\n'}
