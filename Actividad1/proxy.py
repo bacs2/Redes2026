@@ -2,7 +2,7 @@ import socket
 import sys
 import json
 
-IP = "192.168.56.101"
+IP = "172.20.10.13" #"192.168.56.101"
 
 
 #http error 403
@@ -184,7 +184,7 @@ if __name__ == "__main__":
 
 
     buff_size = 50
-    new_socket_address = (IP, 8001)
+    new_socket_address = (IP, 8000)
     print("Proxy iniciado en IP: " + IP + " y puerto: 8000")
     print("Tamaño del buffer: " + str(buff_size))
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -201,8 +201,21 @@ if __name__ == "__main__":
 
         #parsear el mensaje y extraemos el destinatario y la url a la que se quiere conectar
         parsed_message = parse_HTTP_message(recv_message)
+
+        # ==========================================
+        # escudo anti CONNECT (HTTPS)
+        # ==========================================
+        request_line_str = parsed_message["head"]["Request-Line"].decode()
+        if request_line_str.startswith("CONNECT"):
+            print("Ignorando basura de fondo (HTTPS CONNECT)...")
+            c2p_socket.close() # Le cerramos el socket
+            continue           # Volvemos al inicio del while para esperar otra cosa
+        # ==========================================
+
+
         url = extract_url_from_request_line(parsed_message["head"]["Request-Line"].decode())
         host = parsed_message["head"]["Host"].decode() 
+        host = host.split(":")[0].strip() #borrar en caso de que no funcione
 
 
         #chequeamos si la dirección esta bloqueada
@@ -221,7 +234,15 @@ if __name__ == "__main__":
                 try:
                     with open("403.jpg", "rb") as img_file:
                         img_data = img_file.read()
-                        http_image = ("""HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: 15432\r\nConnection: close\r\n\r\n""").encode() + img_data
+                        peso = len(img_data)
+                        headers_image = (
+                            "HTTP/1.1 200 OK\r\n"
+                            "Content-Type: image/jpeg\r\n"
+                            f"Content-Length: {peso}\r\n"
+                            "Connection: close\r\n"
+                            "\r\n"
+                        ).encode()
+                        http_image = headers_image + img_data
                         c2p_socket.send(http_image)
                 except Exception as e:
                     print("Error enviando imagen: ", e)
@@ -277,17 +298,6 @@ if __name__ == "__main__":
         #cerramos sockets de cliente y servidor
         p2s_socket.close()
         c2p_socket.close()
-
-
-        #headers= headers + [4f"X-ElQuePregunta:{ElQuePregunta}"]
-        # Unimos todo con \r\n
-        # Nota: Necesitamos DOS \r\n entre headers y body
-        #response_full = "\r\n".join(headers) + "\r\n\r\n" + body
-
-        # Si necesitas enviarlo por un socket, debes convertirlo a bytes:
-        #response_bytes = response_full.encode()
-
-        #c2p_socket.send(response_bytes)
 
 
 
