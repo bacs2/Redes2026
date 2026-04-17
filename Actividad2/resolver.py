@@ -3,25 +3,33 @@ from dnslib import DNSRecord
 from dnslib.dns import CLASS, QTYPE
 import dnslib
 
-IP = "192.168.56.101"
+IP = "192.168.56.1"
 BUFF_SIZE = 1024
 
 servidor_raiz = "192.33.4.12"
+cache = {}
+historial_dns ={}  # (name, ip): frecuency
 
 
+def actualizar_cache():
+    # busca los 3 dominios más consultados en el historial y los guarda en la cache
+    sorted_historial = sorted(historial_dns.items(), key=lambda item: item[1], reverse=True)
+    top_3 = sorted_historial[:3]
+    for (name, ip), freq in top_3:
+        cache[name] = ip
+        print(f"Actualizando cache: {name} -> {ip} (frecuencia: {freq})")
 
-def print_dns_reply_elements(dnslib_reply):
+def parse_dns_reply_elements(dnslib_reply):
     # header section
-    print(">>--------------- HEADER SECTION ---------------<<\n")
-    print("----------- dnslib_reply.header -----------\n{}\n".format(dnslib_reply.header))
+    #>>--------------- HEADER SECTION ---------------<<\n")
 
 
     dns_message = {}
     dns_header = {}
-    dns_query = {}
-    dns_answer = {}
-    dns_autority = {}
-    dns_aditional = {}
+    dns_query = []
+    dns_answer = []
+    dns_autority = []
+    dns_aditional = []
 
     dns_message['header'] = dns_header
     dns_message['query'] = dns_query
@@ -31,19 +39,10 @@ def print_dns_reply_elements(dnslib_reply):
 
 
     qr_flag = dnslib_reply.header.get_qr()
-    print("-> qr_flag = {}".format(qr_flag))
-
     number_of_query_elements = dnslib_reply.header.q
-    print("-> number_of_query_elements = {}".format(number_of_query_elements))
-
     number_of_answer_elements = dnslib_reply.header.a
-    print("-> number_of_answer_elements = {}".format(number_of_answer_elements))
-
     number_of_authority_elements = dnslib_reply.header.auth
-    print("-> number_of_authority_elements = {}".format(number_of_authority_elements))
-
     number_of_additional_elements = dnslib_reply.header.ar
-    print("-> number_of_additional_elements = {}".format(number_of_additional_elements))
     
     dns_header["ANCOUNT"] = number_of_answer_elements
     dns_header["NSCOUNT"] = number_of_authority_elements
@@ -52,90 +51,55 @@ def print_dns_reply_elements(dnslib_reply):
 
 
 
-    print(">>---------------- QUERY SECTION ---------------<<\n")
-    # query section
+    #>>---------------- QUERY SECTION ---------------<<\n")
     all_querys = dnslib_reply.questions  # lista de objetos tipo dnslib.dns.DNSQuestion
-    first_query = dnslib_reply.get_q()  # primer objeto en la lista all_querys
-    domain_name_in_query = first_query.get_qname()  # nombre de dominio por el cual preguntamos
-    query_class = CLASS.get(first_query.qclass)
-    query_type = QTYPE.get(first_query.qtype)
+    for query in all_querys:
+        q_dict = {
+            'qname': query.get_qname(),
+            'qclass': CLASS.get(query.qclass),
+            'qtype': QTYPE.get(query.qtype)
+        }
+        dns_query.append(q_dict)
 
-
-    dns_query['qname'] = domain_name_in_query
-    dns_query['qclass'] = query_class
-    dns_query['qtype'] = query_type
-    print(">>----------------------------------------------<<\n")
-
-    print(">>---------------- ANSWER SECTION --------------<<\n")
-    # answer section
+    #>>---------------- ANSWER SECTION --------------<<\n")
     if number_of_answer_elements > 0:
-        all_resource_records = dnslib_reply.rr  # lista de objetos tipo dnslib.dns.RR
-
-        first_answer = dnslib_reply.get_a()  # primer objeto en la lista all_resource_records
-        domain_name_in_answer = first_answer.get_rname()  # nombre de dominio por el cual se está respondiendo
-        answer_class = CLASS.get(first_answer.rclass)
-        answer_type = QTYPE.get(first_answer.rtype)
-        answer_rdata = first_answer.rdata  # rdata asociada a la respuesta
-
-            
-        dns_answer['rname'] = domain_name_in_answer
-        dns_answer['rclass'] = answer_class
-        dns_answer['rtype'] = answer_type
-        dns_answer['rdata'] = answer_rdata
-    else:
-        print("-> number_of_answer_elements = {}".format(number_of_answer_elements))
+        for answer in dnslib_reply.rr:
+            a_dict = {
+                'rname': answer.get_rname(),
+                'rclass': CLASS.get(answer.rclass),
+                'rtype': QTYPE.get(answer.rtype),
+                'ttl': answer.ttl,
+                'rdata': answer.rdata
+            }
+            dns_answer.append(a_dict)
 
 
-    print(">>----------------------------------------------<<\n")
-
-    print(">>-------------- AUTHORITY SECTION -------------<<\n")
+    #>>-------------- AUTHORITY SECTION -------------<<\n")
     # authority section
     if number_of_authority_elements > 0:
-        authority_section_list = dnslib_reply.auth  # contiene un total de number_of_authority_elements
-        print("-> authority_section_list = {}".format(authority_section_list))
+        authority_section_list = dnslib_reply.auth
+        for auth in authority_section_list:
+            auth_dict = {
+                'rname': auth.get_rname(),
+                'auth_type': QTYPE.get(auth.rtype),
+                'auth_class': CLASS.get(auth.rclass),
+                'auth_time_to_live': auth.ttl,
+                'rdata': auth.rdata
+            }
+            dns_autority.append(auth_dict)
 
-        if len(authority_section_list) > 0:
-            authority_section_RR_0 = authority_section_list[0]  # objeto tipo dnslib.dns.RR
-            auth_type = QTYPE.get(authority_section_RR_0.rtype)
-            auth_class = CLASS.get(authority_section_RR_0.rclass)
-            auth_time_to_live = authority_section_RR_0.ttl
-            authority_section_0_rdata = authority_section_RR_0.rdata
-
-            dns_autority['number_of_authority_elements'] = number_of_authority_elements
-            dns_autority['auth_type'] = auth_type
-            dns_autority['auth_class'] = auth_class
-            dns_autority['auth_time_to_live'] = auth_time_to_live
-
-            # si recibimos auth_type = 'SOA' este es un objeto tipo dnslib.dns.SOA
-            if isinstance(authority_section_0_rdata, dnslib.dns.SOA):
-                primary_name_server = authority_section_0_rdata.get_mname()  # servidor de nombre primario
-
-            elif isinstance(authority_section_0_rdata, dnslib.dns.NS): # si en vez de SOA recibimos un registro tipo NS
-                name_server_domain = authority_section_0_rdata  # entonces authority_section_0_rdata contiene el nombre de dominio del primer servidor de nombre de la lista
-    else:
-
-    print(">>------------- ADDITIONAL SECTION -------------<<\n")
+    #>>------------- ADDITIONAL SECTION -------------<<
     if number_of_additional_elements > 0:
-        additional_records = dnslib_reply.ar  # lista que contiene un total de number_of_additional_elements DNS records
-
-        first_additional_record = additional_records[0]  # objeto tipo dnslib.dns.RR
-
-        # En caso de tener additional records, estos pueden contener la IP asociada a elementos del authority section
-        ar_class = CLASS.get(first_additional_record.rclass)
-        ar_type = QTYPE.get(first_additional_record.rclass)  # para saber si esto es asi debemos revisar el tipo de record
-
-        if ar_type == 'A': # si el tipo es 'A' (Address)
-            first_additional_record_rname = first_additional_record.rname  # nombre de dominio
-            print("-> first_additional_record_rname = {}".format(first_additional_record_rname))
-
-            first_additional_record_rdata = first_additional_record.rdata  # IP asociada
-            print("-> first_additional_record_rdata = {}".format(first_additional_record_rdata))
-    
-        dns_aditional['ar_class'] = ar_class
-        dns_aditional['ar_type'] = ar_type
-    else:
-        print("-> number_of_additional_elements = {}".format(number_of_additional_elements))
-    print(">>----------------------------------------------<<\n")
+        additional_records = dnslib_reply.ar
+        for ar in additional_records:
+            ar_dict = {
+                'rname': ar.get_rname(),
+                'ar_type': QTYPE.get(ar.rtype),
+                'ar_class': CLASS.get(ar.rclass),
+                'ttl': ar.ttl,
+                'rdata': ar.rdata
+            }
+            dns_aditional.append(ar_dict)
 
 
     return dns_message
@@ -143,62 +107,129 @@ def print_dns_reply_elements(dnslib_reply):
 
 
 
-def obtener_mensaje_dns():
-    server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+def resolver(query, ip=servidor_raiz):
 
-    server_adress = (IP, 8000)
-
-    server.bind(server_adress)
-    print(f"socket escuchando en {IP}:{8000}")
-
-    while True:
-        mensaje, client_address = server.recvfrom(BUFF_SIZE)
-        print(f"mensaje recibido de {client_address}")
-        print(mensaje)
-        server.close()
-        return mensaje
-
-    # recibe un diccionario de la query 
-
-def send_dns_message(message,address, port):
-     # Acá ya no tenemos que crear el encabezado porque dnslib lo hace por nosotros, por default pregunta por el tipo A
-    qname = message["qname"]
+    
+    client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    qname = query["qname"]
     q = DNSRecord.question(qname)
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    server_address = (address, port)
+    print('(debug) Consultando {} con ip: {}'.format(qname,ip ))
+
+
+
+    #chequear si qname esta en el cache   
+    if str(qname) in cache:
+        ip_resuelta = cache[str(qname)]
+        print(f"(debug) Cache encontrado: {qname} -> {ip_resuelta}")
+        reply = q.reply()
+        reply.header.aa = 0 # No es autoritativo, solo responde desde cache
+        reply.add_answer(dnslib.RR(qname, rtype=QTYPE.A, rclass=1, ttl=300, rdata=dnslib.A(ip_resuelta)))
+        return reply    
     try:
-        # lo enviamos, hacemos cast a bytes de lo que resulte de la función pack() sobre el mensaje
-        sock.sendto(bytes(q.pack()), server_address)
-        # En data quedará la respuesta a nuestra consulta
-        data, _ = sock.recvfrom(4096)
-        # le pedimos a dnslib que haga el trabajo de parsing por nosotros 
-        d = print_dns_reply_elements(DNSRecord.parse(data))
+        # a.- Enviar query al servidor y esperar respuesta en el puerto 53
+        client.sendto(bytes(q.pack()), (ip, 53))
+        data, _ = client.recvfrom(BUFF_SIZE)
+    except socket.timeout:
+        client.close()
+        return None
+    client.close()
 
-        if d['rtype'] == 'A':
-            print("La IP asociada a {} es {}".format(d['rname'], d['rdata']))
-            return message
-        
-        if 
-        
+    parsed_reply = DNSRecord.parse(data)
+    dns_dict = parse_dns_reply_elements(parsed_reply)
 
+    # b.- Revisar si hay respuesta tipo A en Answer
+    for ans in dns_dict['answer']:
+        if ans['rtype'] == 'A':
 
-    finally:
-        sock.close()
-    # Ojo que los datos de la respuesta van en en una estructura de datos
-    return d 
+            ip_resuelta = str(ans['rdata'])
+            clave = (str(qname), ip_resuelta)
+            
+            if clave in historial_dns:
+                historial_dns[clave] += 1
+            else:
+                historial_dns[clave] = 1
+                
+            return parsed_reply
 
-def resolver(mensaje_consulta):
-    qname = mensaje_consulta["qname"]
-    print("resolviendo consulta por el dominio: {}".format(qname))
-
-    q = DNSRecord.question(qname)
-    server_address = (servidor_raiz, 53)
-
+    # c.- Revisar delegación de Name Server en Authority
+    ns_found = False
+    for auth in dns_dict['authority']:
+        if auth['auth_type'] == 'NS':
+            ns_found = True
+            break
+            
+    if ns_found:
+        # i.- Revisar si hay respuesta tipo A en Additional
+        ip_additional = None
+        for adr in dns_dict['additional']:
+            if adr['ar_type'] == 'A':
+                ip_additional = str(adr['rdata'])
+                break
+                
+        if ip_additional:
+            # Enviar query original a la IP contenida en Additional
+            return resolver(query, ip_additional)
+        else:
+            # ii.- Tomar nombre del Name Server y resolver su IP recursivamente
+            for auth in dns_dict['authority']:
+                if auth['auth_type'] == 'NS':
+                    ns_name = str(auth['rdata'])
+                    ns_query_record = DNSRecord.question(ns_name)
+                    
+                    # Usamos el parser ya creado para generar el diccionario de la query
+                    ns_query_dict = parse_dns_reply_elements(ns_query_record)['query'][0]
+                    
+                    # Resolver IP del Name Server partiendo desde la raíz
+                    ns_reply = resolver(ns_query_dict, servidor_raiz)
+                    if ns_reply:
+                        ns_reply_dict = parse_dns_reply_elements(ns_reply)
+                        ip_ns = None
+                        for ans in ns_reply_dict['answer']:
+                            if ans['rtype'] == 'A':
+                                ip_ns = str(ans['rdata'])
+                                break
+                        
+                        # Si se obtuvo la IP del NS, reenviamos la query original a este paso
+                        if ip_ns:
+                            return resolver(query, ip_ns)
+                    break
+    
+    return parsed_reply
 
 
 
 if __name__ == "__main__":
-    mensaje = obtener_mensaje_dns()
-    resolver(mensaje.reply.questions)
-             
+    server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server_adress = (IP, 8000)
+    server.bind(server_adress)
+    print(f"socket escuchando en {IP}:{8000}")
+
+    while True:
+        mensaje_bytes, client_address = server.recvfrom(BUFF_SIZE)
+        print(f"mensaje recibido de {client_address}")
+        print(mensaje_bytes)
+
+
+        mensaje =DNSRecord.parse(mensaje_bytes)
+        id_mensaje = mensaje.header.id
+        mensaje_parseado = parse_dns_reply_elements(mensaje)
+        querys = mensaje_parseado['query']
+        for query in querys:
+            parsed_reply = resolver(query)
+            if parsed_reply:
+                # Retornar la respuesta al cliente
+                parsed_reply.header.id = id_mensaje  # mantener el mismo ID en la respuesta
+                parsed_reply.header.set_qr(1)  # marcar como respuesta
+                parsed_reply.header.set_ra(1)  # indicar que soportamos recursividad
+                parsed_reply.header.aa = 0     # no somos servidor autoritativo
+                print("mensaje recibido: {}".format(parsed_reply))
+                actualizar_cache()
+                server.sendto(bytes(parsed_reply.pack()), client_address)
+
+        print("mensaje enviado a {}: {}".format(client_address, parsed_reply))
+        print("--------------------------------------------------")    
+
+
+    
+
 
