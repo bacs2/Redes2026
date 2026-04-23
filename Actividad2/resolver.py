@@ -3,7 +3,7 @@ from dnslib import DNSRecord
 from dnslib.dns import CLASS, QTYPE
 import dnslib
 
-IP = "192.168.56.1"
+IP = "192.168.0.10"
 BUFF_SIZE = 1024
 
 servidor_raiz = "192.33.4.12"

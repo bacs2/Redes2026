@@ -215,7 +215,7 @@ if __name__ == "__main__":
 
         url = extract_url_from_request_line(parsed_message["head"]["Request-Line"].decode())
         host = parsed_message["head"]["Host"].decode() 
-        host = host.split(":")[0].strip() #borrar en caso de que no funcione
+        host = host.split(":")[0].strip() 
 
 
         #chequeamos si la dirección esta bloqueada
