@@ -1,26 +1,11 @@
 import socket
 bufsize = 16
-address = ("localhost", 12345)
+address = ("localhost", 8000)
 
-# Socket no orientado a conexión
-servidor = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+import SocketTCP as SocketTCP
 
- # servidor escuchando
-servidor.bind(address)
- 
-str = ""
- # recibe el mensaje del cliente
-while True:
-    message, address = servidor.recvfrom(bufsize)
-    str += message.decode()
-    print(str)
-
-
-
-
-
- # Recibir mensajes. Este método nos entrega el mensaje junto a la dirección de origen del mensaje
-
- 
- # Enviar mensajes. Este método debe especificar la dirección a la que se va a enviar el mensaje
-servidor.sendto(message, address)
+if __name__ == "__main__":
+    server_socketTCP = SocketTCP.SocketTCP()
+    server_socketTCP.bind(address)
+    connection_socketTCP, new_address = server_socketTCP.accept()
+    print(f"Conexion establecida con {new_address}, secuencia inicial: {connection_socketTCP.secuencia}")
