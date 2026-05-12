@@ -106,7 +106,7 @@ class SocketTCP:
 
     # función auxiliar que se encarga de enviar un segmento y esperar su ACK, volviendo a mandar el mensaje de ser necesario cuando se cumple el timeout
     def _enviar_segmento_stop_wait(self, datos_int):
-        self.secuencia += 1
+        self.secuencia += len(datos_int.to_bytes(byteorder='big')) # se suma a la secuencia el largo del trozo
         
         segmento = self.create_segment({
             "flags": 0, # sin flags porque son solo datos
@@ -123,7 +123,7 @@ class SocketTCP:
                 self.socketUDP.sendto(paquete_bytes, self.direccion_destino)
                 
                 # espera el ACK
-                respuesta, _ = self.socketUDP.recvfrom(self.bufsize)
+                respuesta, _ = self.socketUDP.recvfrom(self.bufsize) #cambiar por recv implementado por nosotros
                 parsed = self.parse_segment(int.from_bytes(respuesta, byteorder='big'))
                 
                 # revisamos que las flags sean un ACK y que el numero de secuencia sea el correcto (el mismo que se envió)
@@ -143,14 +143,16 @@ class SocketTCP:
         for i in range(0, largo_total, 16):
             mensaje_16 = message[i:i+16]
             
-            # se rellena el lado derecho para llegar  a los 16 bytes
-            mensaje_16_padded = mensaje_16.ljust(16, b'\x00')
+            # se rellena el lado derecho para llegar  a los 16 bytes si el mensaje es más corto
+            # mensaje_16_padded = mensaje_16.ljust(16, b'\x00')
             
             # convertimos de bytes a int
-            mensaje_int = int.from_bytes(mensaje_16_padded, byteorder='big')
+            mensaje_int = int.from_bytes(mensaje_16, byteorder='big')
             
-            # Ese envia usando la función auxiliar de stop and wait
+            # se envia usando la función auxiliar de stop and wait
             self._enviar_segmento_stop_wait(mensaje_int)
+
+    def recv(self, bufsize):
 
     
 if __name__ == "__main__":
