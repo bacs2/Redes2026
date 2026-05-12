@@ -13,6 +13,9 @@ class SocketTCP:
         self.direccion_destino = None
         self.secuencia = np.random.randint(0, 100)
         self.bufsize = 21
+        self.bytes_por_recibir = 0
+        self.buffer_datos = b""
+        self.secuencia_esperada = None
 
 
     #retorna un diccionario con los campos del segmento: flags, secuencia y mensaje
@@ -98,6 +101,56 @@ class SocketTCP:
 
 
         return new_socketTCP, direccion_cliente
+
+    #========Parte 5========
+
+    # función auxiliar que se encarga de enviar un segmento y esperar su ACK, volviendo a mandar el mensaje de ser necesario cuando se cumple el timeout
+    def _enviar_segmento_stop_wait(self, datos_int):
+        self.secuencia += 1
+        
+        segmento = self.create_segment({
+            "flags": 0, # sin flags porque son solo datos
+            "secuencia": self.secuencia,
+            "mensaje": datos_int
+        })
+        paquete_bytes = segmento.to_bytes(self.bufsize, byteorder='big') #se usa el big endian que es el estandar de internet y se asegura de que el segmento enviado sea del tamaño del buffsize
+        
+        # seteamos un timeout de espera para el ACK
+        self.socketUDP.settimeout(0.5)
+        
+        while True:
+            try:
+                self.socketUDP.sendto(paquete_bytes, self.direccion_destino)
+                
+                # espera el ACK
+                respuesta, _ = self.socketUDP.recvfrom(self.bufsize)
+                parsed = self.parse_segment(int.from_bytes(respuesta, byteorder='big'))
+                
+                # revisamos que las flags sean un ACK y que el numero de secuencia sea el correcto (el mismo que se envió)
+                if parsed["flags"] == ACK and parsed["secuencia"] == self.secuencia:
+                    break # sale del while
+                    
+            except socket.timeout:
+                # comienza de nuevo el while true si se pasa el timeout
+                pass
+
+    def send(self, message):
+        # se calcula el largo del mensaje
+        largo_total = len(message)
+        self._enviar_segmento_stop_wait(largo_total) # primero se manda el largo
+        
+        # se divide el mensaje
+        for i in range(0, largo_total, 16):
+            mensaje_16 = message[i:i+16]
+            
+            # se rellena el lado derecho para llegar  a los 16 bytes
+            mensaje_16_padded = mensaje_16.ljust(16, b'\x00')
+            
+            # convertimos de bytes a int
+            mensaje_int = int.from_bytes(mensaje_16_padded, byteorder='big')
+            
+            # Ese envia usando la función auxiliar de stop and wait
+            self._enviar_segmento_stop_wait(mensaje_int)
 
     
 if __name__ == "__main__":
